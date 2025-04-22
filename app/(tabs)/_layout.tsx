@@ -1,3 +1,4 @@
+import React from 'react';
 import { Tabs } from 'expo-router';
 import { Compass, Map, Settings, Camera } from 'lucide-react-native';
 

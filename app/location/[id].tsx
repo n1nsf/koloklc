@@ -1,52 +1,53 @@
-import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Platform, Dimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Platform, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Camera, History, MapPin, Share2, X } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
-import ModelViewer from '@/components/ModelViewer';
+// import ModelViewer from '@/components/ModelViewer';
+import { supabase } from '@/lib/supabase';
+import type { Database } from '@/types/supabase';
 
-const LOCATIONS = {
-  '1': {
-    name: 'Eiffel Tower',
-    city: 'Paris, France',
-    image: 'https://images.unsplash.com/photo-1511739001486-6bfe10ce785f?auto=format&fit=crop&q=80&w=800',
-    description: "The Eiffel Tower, completed in 1889, stands as Paris's iconic symbol. This wrought-iron marvel rises 324 meters (1,063 ft) above the city, offering breathtaking views of the French capital.",
-    facts: [
-      "Originally built as a temporary structure for the 1889 World's Fair",
-      "Named after engineer Gustave Eiffel",
-      "Takes 20,000 light bulbs to make it sparkle at night",
-      "Repainted every 7 years using 60 tons of paint"
-    ],
-    arContent: {
-      model: 'https://models.readyplayer.me/63e4d94d7c40f3bea4f94959.glb',
-      description: 'Explore the Eiffel Tower in 3D. Drag to rotate, pinch to zoom.',
-    }
-  },
-  '2': {
-    name: 'Colosseum',
-    city: 'Rome, Italy',
-    image: 'https://images.unsplash.com/photo-1552432134-0e3ef9ceeb1e?auto=format&fit=crop&q=80&w=800',
-    description: "The Colosseum, completed in 80 AD, is the largest ancient amphitheater ever built. This architectural marvel could hold up to 50,000-80,000 spectators and hosted gladiatorial contests, animal hunts, and dramatic performances.",
-    facts: [
-      "Construction took 8-10 years using over 60,000 Jewish slaves",
-      "Originally known as the Flavian Amphitheatre",
-      "Could be filled with water for mock naval battles",
-      "About one-third of the original structure remains"
-    ],
-    arContent: {
-      model: 'https://models.readyplayer.me/63e4d94d7c40f3bea4f94959.glb',
-      description: 'Step back in time and explore the Colosseum in 3D.',
-    }
-  }
-};
+type Location = Database['public']['Tables']['locations']['Row'];
 
 export default function LocationScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const location = LOCATIONS[id as keyof typeof LOCATIONS];
+  const [location, setLocation] = useState<Location | null>(null);
   const [showAR, setShowAR] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!location) {
+  useEffect(() => {
+    async function fetchLocation() {
+      try {
+        const { data, error } = await supabase
+          .from('locations')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (error) throw error;
+        setLocation(data);
+      } catch (err) {
+        setError('Failed to load location');
+        console.error('Error:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchLocation();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
+  if (error || !location) {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>Location not found</Text>
@@ -65,7 +66,7 @@ export default function LocationScreen() {
     <View style={styles.container}>
       {showAR ? (
         <View style={styles.arContainer}>
-          <ModelViewer modelUrl={location.arContent.model} />
+          {/* <ModelViewer modelUrl={location.model_url || ''} /> */}
           <View style={styles.arControls}>
             <TouchableOpacity 
               style={styles.closeButton}
@@ -76,14 +77,14 @@ export default function LocationScreen() {
             </TouchableOpacity>
             <BlurView intensity={80} style={styles.arOverlay}>
               <Text style={styles.arTitle}>3D View</Text>
-              <Text style={styles.arDescription}>{location.arContent.description}</Text>
+              <Text style={styles.arDescription}>Explore the {location.name} in 3D. Drag to rotate, pinch to zoom.</Text>
             </BlurView>
           </View>
         </View>
       ) : (
         <ScrollView>
           <View style={styles.imageContainer}>
-            <Image source={{ uri: location.image }} style={styles.image} />
+            <Image source={{ uri: location.image_url }} style={styles.image} />
             <TouchableOpacity 
               style={styles.backButton}
               onPress={() => router.back()}>
@@ -92,7 +93,7 @@ export default function LocationScreen() {
               </BlurView>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.backButton, styles.shareButton]}
+              style={styles.shareButton}
               onPress={() => {}}>
               <BlurView intensity={80} style={styles.buttonBlur}>
                 <Share2 size={24} color="#ffffff" />
@@ -106,15 +107,17 @@ export default function LocationScreen() {
                 <Text style={styles.title}>{location.name}</Text>
                 <View style={styles.locationRow}>
                   <MapPin size={16} color="#64748b" />
-                  <Text style={styles.city}>{location.city}</Text>
+                  <Text style={styles.city}>{location.city}, {location.country}</Text>
                 </View>
               </View>
-              <TouchableOpacity 
-                style={styles.arButton}
-                onPress={startARExperience}>
-                <Camera size={24} color="#ffffff" />
-                <Text style={styles.arButtonText}>View in 3D</Text>
-              </TouchableOpacity>
+              {location.model_url && (
+                <TouchableOpacity 
+                  style={styles.arButton}
+                  onPress={startARExperience}>
+                  <Camera size={24} color="#ffffff" />
+                  <Text style={styles.arButtonText}>View in 3D</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <Text style={styles.description}>{location.description}</Text>
@@ -143,6 +146,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+  },
   imageContainer: {
     position: 'relative',
     width: '100%',
@@ -162,8 +171,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   shareButton: {
-    left: undefined,
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 48 : 16,
     right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
   },
   buttonBlur: {
     flex: 1,

@@ -1,11 +1,11 @@
 {
-  "name": "wanderlens",
+  "name": "kolok-learning-city",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "EXPO_NO_TELEMETRY=1 expo start",
-    "build:web": "expo export --platform web",
+    "dev": "EXPO_NO_TELEMETRY=1 npx expo start",
+    "build:web": "EXPO_NO_TELEMETRY=1 npx expo export --platform web",
     "lint": "expo lint"
   },
   "dependencies": {
@@ -16,11 +16,13 @@
     "@react-three/drei": "^9.99.0",
     "@react-three/fiber": "^8.15.19",
     "@react-three/xr": "^5.7.1",
+    "@supabase/supabase-js": "^2.39.7",
     "expo": "52.0.33",
     "expo-blur": "^14.0.3",
     "expo-camera": "^16.0.18",
     "expo-constants": "^17.0.5",
     "expo-font": "^13.0.3",
+    "expo-gl": "^15.0.5",
     "expo-haptics": "^14.0.1",
     "expo-linear-gradient": "^14.0.2",
     "expo-linking": "^7.0.5",
