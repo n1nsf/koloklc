@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Compass, Map, Settings, Camera } from 'lucide-react-native';
+import { Compass, Map, Trophy } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -24,13 +24,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="scan"
-        options={{
-          title: 'Scan',
-          tabBarIcon: ({ size, color }) => <Camera size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="map"
         options={{
           title: 'Map',
@@ -38,10 +31,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="achievements"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ size, color }) => <Settings size={size} color={color} />,
+          title: 'Achievements',
+          tabBarIcon: ({ size, color }) => <Trophy size={size} color={color} />,
         }}
       />
     </Tabs>

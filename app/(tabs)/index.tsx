@@ -1,6 +1,6 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { Camera, Info } from 'lucide-react-native';
 import { Link } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -20,7 +20,7 @@ export default function ExploreScreen() {
           .from('locations')
           .select('*')
           .eq('featured', true)
-          .limit(5);
+          .limit(10);
 
         if (error) throw error;
         setLocations(data);
@@ -54,18 +54,22 @@ export default function ExploreScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Image 
-          source={require('@/assets/images/logo.png')} 
-          style={styles.logo}
-          resizeMode="contain"
-        />
+        <Link href="/" asChild>
+          <TouchableOpacity onPress={() => Linking.openURL('https://koloklc.com')}>
+            <Image 
+              source={require('@/assets/images/logo.png')} 
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        </Link>
         <View style={styles.headerTextContainer}>
           <Text style={styles.title}>Kolok Learning City</Text>
           <Text style={styles.subtitle}>Explore the world through AR</Text>
         </View>
       </View>
-      <Link href="/scan" asChild>
-        <TouchableOpacity style={styles.scanButton}>
+      <Link href="/" asChild>
+        <TouchableOpacity style={styles.scanButton} onPress={() => Linking.openURL('https://koloklc.com/app/ar/location')}>
           <Camera size={24} color="#ffffff" />
           <Text style={styles.scanButtonText}>Scan Landmark</Text>
         </TouchableOpacity>
@@ -80,7 +84,7 @@ export default function ExploreScreen() {
             <View style={styles.locationInfo}>
               <Text style={styles.locationName}>{location.name}</Text>
               <Text style={styles.locationCity}>{location.city}, {location.country}</Text>
-              <Text style={styles.locationDescription}>{location.description}</Text>
+              <Text style={styles.locationDescription} numberOfLines={5}>{location.description}</Text>
               <View style={styles.arBadge}>
                 <Info size={16} color="#2563eb" />
                 <Text style={styles.arBadgeText}>AR Experience Available</Text>

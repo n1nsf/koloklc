@@ -14,11 +14,34 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "staticRouter": {
+        "basePath": "/app"
+      },
+      "router": {
+        "basePath": "/app"
+      },
+      "build": {
+        "output": {
+          "publicPath": "/app/"
+        }
+      }
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      "expo-barcode-scanner"
+    ],
     "experiments": {
+      "baseUrl": "/app",
       "typedRoutes": true
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "extra": {
+      "assetExts": [
+        "glb"
+      ]
     }
   }
 }
