@@ -160,6 +160,35 @@ export interface Database {
           created_at?: string
         }
       }
+      location_recommendations: {
+        Row: {
+          id: string
+          source_location_id: string
+          recommended_location_id: string
+          priority: number
+          reason: string | null
+          created_at: string
+          active: boolean
+        }
+        Insert: {
+          id?: string
+          source_location_id: string
+          recommended_location_id: string
+          priority?: number
+          reason?: string | null
+          created_at?: string
+          active?: boolean
+        }
+        Update: {
+          id?: string
+          source_location_id?: string
+          recommended_location_id?: string
+          priority?: number
+          reason?: string | null
+          created_at?: string
+          active?: boolean
+        }
+      }
     }
     Views: {
       [_ in never]: never

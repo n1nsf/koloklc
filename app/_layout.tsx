@@ -13,10 +13,15 @@ function RootLayoutNav() {
   useEffect(() => {
     if (loading) return;
 
+    console.log('session', session);
+    console.log('loading', loading);
+    console.log('segments', segments);
+
     const inAuthGroup = segments[0] === '(auth)';
     const inTabsGroup = segments[0] === '(tabs)';
+    const isLocationGroup = segments[0] === 'location';
 
-    if (!session && !inAuthGroup) {
+    if (!session && !inAuthGroup && !inTabsGroup && !isLocationGroup) {
       // Redirect to login if not authenticated and not in auth group
       router.replace('/(auth)/login');
     } else if (session && inAuthGroup) {

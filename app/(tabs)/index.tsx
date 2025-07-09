@@ -68,12 +68,12 @@ export default function ExploreScreen() {
           <Text style={styles.subtitle}>Explore the world through AR</Text>
         </View>
       </View>
-      <Link href="/" asChild>
+      {/* <Link href="/" asChild>
         <TouchableOpacity style={styles.scanButton} onPress={() => Linking.openURL('https://koloklc.com/app/ar/location')}>
           <Camera size={24} color="#ffffff" />
           <Text style={styles.scanButtonText}>Scan Landmark</Text>
         </TouchableOpacity>
-      </Link>
+      </Link> */}
 
       <Text style={styles.sectionTitle}>Featured Locations</Text>
       

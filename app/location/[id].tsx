@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Platform, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Platform, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Camera, History, MapPin, Share2, X, Trophy, Award } from 'lucide-react-native';
+import { ArrowLeft, Camera, History, MapPin, Share2, X, Trophy, Award, Navigation } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 // import ModelViewer from '@/components/ModelViewer';
 import { supabase } from '@/lib/supabase';
@@ -15,6 +15,24 @@ type CheckIn = Database['public']['Tables']['check_ins']['Row'] & {
   missions: Pick<Mission, 'title' | 'description' | 'points'>;
   locations: Pick<Location, 'name' | 'city' | 'country'>;
 };
+
+type RecommendedLocation = Location & {
+  priority: number;
+  reason: string | null;
+};
+
+// Function to calculate distance between two points using Haversine formula
+// const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+//   const R = 6371; // Earth's radius in kilometers
+//   const dLat = (lat2 - lat1) * Math.PI / 180;
+//   const dLon = (lon2 - lon1) * Math.PI / 180;
+//   const a = 
+//     Math.sin(dLat/2) * Math.sin(dLat/2) +
+//     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+//     Math.sin(dLon/2) * Math.sin(dLon/2);
+//   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+//   return R * c;
+// };
 
 const showAlert = (title: string, message: string, onConfirm?: () => void) => {
   if (Platform.OS === 'web') {
@@ -55,6 +73,8 @@ export default function LocationScreen() {
   const [missions, setMissions] = useState<Mission[]>([]);
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [completedMissions, setCompletedMissions] = useState<Set<string>>(new Set());
+  // const [nearbyLocations, setNearbyLocations] = useState<Location[]>([]);
+  const [recommendedLocations, setRecommendedLocations] = useState<RecommendedLocation[]>([]);
 
   useEffect(() => {
     fetchLocation();
@@ -74,7 +94,7 @@ export default function LocationScreen() {
       const missionsData = await getMissions(id as string);
       setMissions(missionsData);
 
-      // Fetch completed missions
+      // Fetch completed missions only if user is logged in
       if (user) {
         const { data: checkIns } = await supabase
           .from('check_ins')
@@ -86,6 +106,35 @@ export default function LocationScreen() {
           setCompletedMissions(new Set(checkIns.map(checkIn => checkIn.mission_id)));
         }
       }
+
+      // Fetch nearby locations if current location has coordinates
+      // if (locationData.latitude && locationData.longitude) {
+      //   const { data: allLocations } = await supabase
+      //     .from('locations')
+      //     .select('*')
+      //     .neq('id', id); // Exclude current location
+
+      //   if (allLocations) {
+      //     const nearby = allLocations
+      //       .filter(loc => loc.latitude && loc.longitude)
+      //       .map(loc => ({
+      //         ...loc,
+      //         distance: calculateDistance(
+      //           locationData.latitude!,
+      //           locationData.longitude!,
+      //           loc.latitude!,
+      //           loc.longitude!
+      //         )
+      //       }))
+      //       .sort((a, b) => a.distance - b.distance)
+      //       .slice(0, 3); // Show top 3 nearest locations
+
+      //     setNearbyLocations(nearby);
+      //   }
+      // }
+
+      // Fetch recommended locations
+      await fetchRecommendedLocations();
     } catch (err) {
       setError('Failed to load location');
       console.error('Error:', err);
@@ -94,12 +143,49 @@ export default function LocationScreen() {
     }
   };
 
+  const fetchRecommendedLocations = async () => {
+    try {
+      // Use the new Supabase function to get recommended locations
+      const { data: recommendedData, error } = await supabase
+        .rpc('get_recommended_locations', {
+          p_source_location_id: id as string
+        });
+
+      if (error) {
+        console.error('Error fetching recommended locations:', error);
+        return;
+      }
+
+      if (recommendedData) {
+        // Filter out locations user has already completed if logged in
+        let filteredRecommendations = recommendedData;
+        
+        if (user) {
+          const { data: userCheckIns } = await supabase
+            .from('check_ins')
+            .select('location_id')
+            .eq('user_id', user.id);
+          
+          if (userCheckIns) {
+            const userCompletedLocations = new Set(userCheckIns.map(c => c.location_id));
+            filteredRecommendations = recommendedData.filter(
+              (loc: RecommendedLocation) => !userCompletedLocations.has(loc.id)
+            );
+          }
+        }
+
+        setRecommendedLocations(filteredRecommendations);
+      }
+    } catch (err) {
+      console.error('Error fetching recommended locations:', err);
+    }
+  };
+
   const handleCheckIn = async (missionId: string) => {
-    console.log('handleCheckIn', user);
     if (!user) {
       showAlert(
         'Login Required',
-        'Please log in to check in at this location.',
+        'Please log in to check in at this location and earn points.',
         () => router.push('/login')
       );
       return;
@@ -187,6 +273,30 @@ export default function LocationScreen() {
     window.location.href = location.model_url || '';
   };
 
+  const handleNavigation = () => {
+    if (!location.latitude || !location.longitude) {
+      showAlert('Navigation Unavailable', 'Location coordinates are not available for navigation.');
+      return;
+    }
+
+    const lat = location.latitude;
+    const lng = location.longitude;
+    const label = encodeURIComponent(location.name);
+    
+    let url;
+    if (Platform.OS === 'ios') {
+      url = `http://maps.apple.com/?q=${label}&ll=${lat},${lng}`;
+    } else {
+      url = `geo:${lat},${lng}?q=${lat},${lng}(${label})`;
+    }
+
+    Linking.openURL(url).catch(() => {
+      // Fallback to Google Maps web
+      const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+      Linking.openURL(googleMapsUrl);
+    });
+  };
+
   return (
     <View style={styles.container}>
       {showAR ? (
@@ -219,44 +329,46 @@ export default function LocationScreen() {
                     <MapPin size={16} color="#64748b" />
                     <Text style={styles.city}>{location.city}, {location.country}</Text>
                   </View>
-                  {location.model_url && (
-                    <TouchableOpacity 
-                      style={styles.arButton}
-                      onPress={startARExperience}>
-                      <Camera size={24} color="#ffffff" />
-                      <Text style={styles.arButtonText}>Scan AR</Text>
-                    </TouchableOpacity>
-                  )}
+                  <View style={styles.actionButtons}>
+                    {location.latitude && location.longitude && (
+                      <TouchableOpacity 
+                        style={styles.navigationButton}
+                        onPress={handleNavigation}>
+                        <Navigation size={20} color="#ffffff" />
+                        <Text style={styles.navigationButtonText}>Navigate</Text>
+                      </TouchableOpacity>
+                    )}
+                    {location.model_url && (
+                      <TouchableOpacity 
+                        style={styles.arButton}
+                        onPress={startARExperience}>
+                        <Camera size={24} color="#ffffff" />
+                        <Text style={styles.arButtonText}>Scan AR</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               </View>
             </View>
 
-            <View style={styles.progressSection}>
-              <View style={styles.progressHeader}>
-                <Text style={styles.progressTitle}>Progress</Text>
-                <Text style={styles.progressPoints}>{completedPoints}/{totalPoints} points</Text>
+            {user && (
+              <View style={styles.progressSection}>
+                <View style={styles.progressHeader}>
+                  <Text style={styles.progressTitle}>Progress</Text>
+                  <Text style={styles.progressPoints}>{completedPoints}/{totalPoints} points</Text>
+                </View>
+                <View style={styles.progressBar}>
+                  <View 
+                    style={[
+                      styles.progressFill, 
+                      { width: `${(completedPoints / totalPoints) * 100}%` }
+                    ]} 
+                  />
+                </View>
+                <Text style={styles.progressText}>
+                  {completedMissions.size} of {missions.length} missions completed
+                </Text>
               </View>
-              <View style={styles.progressBar}>
-                <View 
-                  style={[
-                    styles.progressFill, 
-                    { width: `${(completedPoints / totalPoints) * 100}%` }
-                  ]} 
-                />
-              </View>
-              <Text style={styles.progressText}>
-                {completedMissions.size} of {missions.length} missions completed
-              </Text>
-            </View>
-
-            {isAllCompleted && (
-              <TouchableOpacity 
-                style={styles.certificateButton}
-                onPress={handleRequestCertificate}
-              >
-                <Award size={20} color="#ffffff" />
-                <Text style={styles.certificateButtonText}>Request Certificate</Text>
-              </TouchableOpacity>
             )}
 
             <Text style={styles.description}>{location.description}</Text>
@@ -309,6 +421,101 @@ export default function LocationScreen() {
                 ))}
               </View>
             )}
+
+            {recommendedLocations.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Trophy size={20} color="#0f172a" />
+                  <Text style={styles.sectionTitle}>Recommended Next Locations</Text>
+                </View>
+                {recommendedLocations.map((recommendedLocation) => (
+                  <TouchableOpacity
+                    key={recommendedLocation.id}
+                    style={styles.recommendedLocationCard}
+                    onPress={() => router.push(`/location/${recommendedLocation.id}`)}
+                  >
+                    <Image 
+                      source={{ uri: recommendedLocation.image_url }} 
+                      style={styles.recommendedLocationImage} 
+                    />
+                    <View style={styles.recommendedLocationInfo}>
+                      <View style={styles.recommendedLocationHeader}>
+                        <Text style={styles.recommendedLocationName}>{recommendedLocation.name}</Text>
+                        <View style={styles.recommendedLocationBadges}>
+                          {recommendedLocation.featured && (
+                            <View style={styles.featuredBadge}>
+                              <Text style={styles.featuredBadgeText}>Featured</Text>
+                            </View>
+                          )}
+                          <View style={styles.priorityBadge}>
+                            <Text style={styles.priorityBadgeText}>Priority {recommendedLocation.priority}</Text>
+                          </View>
+                        </View>
+                      </View>
+                      <Text style={styles.recommendedLocationCity}>
+                        {recommendedLocation.city}, {recommendedLocation.country}
+                      </Text>
+                      {recommendedLocation.reason && (
+                        <Text style={styles.recommendedLocationReason}>
+                          {recommendedLocation.reason}
+                        </Text>
+                      )}
+                      <Text style={styles.recommendedLocationDescription} numberOfLines={2}>
+                        {recommendedLocation.description}
+                      </Text>
+                    </View>
+                    <View style={styles.recommendedLocationArrow}>
+                      <ArrowLeft size={16} color="#64748b" style={{ transform: [{ rotate: '180deg' }] }} />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* {nearbyLocations.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Navigation size={20} color="#0f172a" />
+                  <Text style={styles.sectionTitle}>Nearby Locations</Text>
+                </View>
+                {nearbyLocations.map((nearbyLocation) => (
+                  <TouchableOpacity
+                    key={nearbyLocation.id}
+                    style={styles.nearbyLocationCard}
+                    onPress={() => router.push(`/location/${nearbyLocation.id}`)}
+                  >
+                    <Image 
+                      source={{ uri: nearbyLocation.image_url }} 
+                      style={styles.nearbyLocationImage} 
+                    />
+                    <View style={styles.nearbyLocationInfo}>
+                      <Text style={styles.nearbyLocationName}>{nearbyLocation.name}</Text>
+                      <Text style={styles.nearbyLocationCity}>
+                        {nearbyLocation.city}, {nearbyLocation.country}
+                      </Text>
+                      <Text style={styles.nearbyLocationDistance}>
+                        {(nearbyLocation as any).distance.toFixed(1)} km away
+                      </Text>
+                    </View>
+                    <View style={styles.nearbyLocationArrow}>
+                      <ArrowLeft size={16} color="#64748b" style={{ transform: [{ rotate: '180deg' }] }} />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )} */}
+
+            
+
+            {user && isAllCompleted && (
+              <TouchableOpacity 
+                style={styles.certificateButton}
+                onPress={handleRequestCertificate}
+              >
+                <Award size={20} color="#ffffff" />
+                <Text style={styles.certificateButtonText}>Request Certificate</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       )}
@@ -343,9 +550,9 @@ const styles = StyleSheet.create({
     color: '#1e293b',
   },
   locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 12,
   },
   locationRow: {
     flexDirection: 'row',
@@ -355,6 +562,26 @@ const styles = StyleSheet.create({
   city: {
     fontSize: 16,
     color: '#64748b',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  navigationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#059669',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 8,
+  },
+  navigationButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   arButton: {
     flexDirection: 'row',
@@ -578,5 +805,129 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  nearbyLocationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  nearbyLocationImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 16,
+  },
+  nearbyLocationInfo: {
+    flex: 1,
+  },
+  nearbyLocationName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 4,
+  },
+  nearbyLocationCity: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 2,
+  },
+  nearbyLocationDistance: {
+    fontSize: 14,
+    color: '#2563eb',
+    fontWeight: '500',
+  },
+  nearbyLocationArrow: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recommendedLocationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  recommendedLocationImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    marginRight: 16,
+  },
+  recommendedLocationInfo: {
+    flex: 1,
+  },
+  recommendedLocationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+  recommendedLocationName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1e293b',
+    flex: 1,
+    marginRight: 8,
+  },
+  recommendedLocationBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  featuredBadge: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  featuredBadgeText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  priorityBadge: {
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  priorityBadgeText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  recommendedLocationCity: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 2,
+  },
+  recommendedLocationReason: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 16,
+  },
+  recommendedLocationDescription: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 16,
+  },
+  recommendedLocationArrow: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
